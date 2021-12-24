@@ -1,30 +1,39 @@
 <template>
   <div id="app">
-    <!-- <img alt="Vue logo" src="./assets/logo.png"> -->
     <table border="1" cellspacing="0" cellpadding="1">
       <tbody>
         <tr>
           <th></th>
-          <th v-for="(month, index) in months" :key="index">{{ month.name }}</th>
-          <!-- <td>
-          </td> -->
+          <th v-for="(month, index) in months" :key="index" class="month__name" @click="openMonth(index)">{{ month.name }}</th>
         </tr>
         <tr>
           <td></td>
-          <td v-for="(month, index) in months" :key="index" class="date"> </td>
-        </tr>
-        <tr v-for="(employee, indexEmployee) in employees" :key="employee.id">
-          <td>{{employee.person.name}} {{indexEmployee}}</td>
-          <td v-for="(month, indexMonth) in months" :key="indexMonth">
+          <td v-for="(month, index) in months" :key="index" class="date">
             <ul class="weeks">
-              <li v-for="week in weeksInMonth(`2021`, indexMonth)" :key="week" class="week" :style="{'width':`${100/weeksInMonth(`2021`, indexMonth)}%`}" :class="{'week_vacation': vacationWeek(week, month, indexMonth, employee.vacations)}">
-                {{week}}
-                <!-- 1 -->
+              <li v-for="week in weeksInMonth(`2021`, index)" :key="week" :style="{'width':`${100/weeksInMonth(`2021`, index)}%`}" :class="{'openedWeek': openedMonth === index}">
+                <span class="week__dates" v-show="openedMonth === index">{{weekRangeDateString(month.startWeek - 1 + week)}}</span>
               </li>
             </ul>
-            <!-- {{ indexEmployee }} -->
-
-            <!-- {{  }} -->
+          </td>
+        </tr>
+        <tr>
+          <td></td>
+          <td v-for="(month, index) in months" :key="index">
+            <ul class="weeks">
+              <li v-for="week in weeksInMonth(`2021`, index)" :key="week" :style="{'width':`${100/weeksInMonth(`2021`, index)}%`}" :class="{'openedWeek': openedMonth === index}">
+                <span v-show="openedMonth === index">{{month.startWeek - 1 + week}}</span>
+              </li>
+            </ul>
+          </td>
+        </tr>
+        <tr v-for="employee in employees" :key="employee.id">
+          <td>{{employee.person.name}}</td>
+          <td v-for="(month, indexMonth) in months" :key="indexMonth">
+            <ul class="weeks" :class="{'openedMonth': openedMonth === indexMonth}">
+              <li v-for="week in weeksInMonth(`2021`, indexMonth)" :key="week" class="week" :style="{'width':`${100/weeksInMonth(`2021`, indexMonth)}%`}" :class="{'week_vacation': vacationWeek(week, month, employee.vacations).isVacation, 'openedWeek': openedMonth === indexMonth}">
+              <span v-show="openedMonth === indexMonth">{{vacationRangeDateString(employee.id, vacationWeek(week, month, employee.vacations).vacationId)}}</span>
+              </li>
+            </ul>
           </td>
         </tr>
       </tbody>
@@ -44,6 +53,7 @@ export default {
         'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
       ],
       currentYear: '2021',
+      openedMonth: null,
     };
   },
   components: {
@@ -64,7 +74,6 @@ export default {
           lastValue += this.weeksInMonth(this.currentYear, i) - 1;
         }
       }
-      // console.log(this.weekByDate('2021-2-1'));
       return months;
     },
   },
@@ -72,9 +81,6 @@ export default {
     axios.get('vacation.json').then((input) => {
       this.employees = input.data.data;
     });
-    // console.log(this.weekByDate('2021-12-27'));
-    // const d = new Date();
-    // console.log()
   },
   methods: {
     timeToDays(time) {
@@ -98,12 +104,13 @@ export default {
     },
     getWeekDay(date) {
       const days = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ'];
-      // console.log(date);
       return days[date.getDay()];
     },
-    vacationWeek(weekNumber, month, indexMonth, vacations) {
-      let vacationWeek = false;
-      // console.log(month.startWeek + week - 1);
+    vacationWeek(weekNumber, month, vacations) {
+      const vacationWeek = {
+        isVacation: false,
+        vacationId: undefined,
+      };
       vacations.forEach((vacation) => {
         let vacationStartWeek;
         if ((new Date(vacation.startDate).getMonth() === 0) && this.weekByDate(vacation.startDate) === 52) {
@@ -113,13 +120,74 @@ export default {
         }
         const vacationEndWeek = this.weekByDate(vacation.endDate);
 
-        for (let week = vacationStartWeek; week < vacationEndWeek; week += 1) {
+        for (let week = vacationStartWeek; week <= vacationEndWeek; week += 1) {
           if (week === (month.startWeek - 1 + weekNumber)) {
-            vacationWeek = true;
+            vacationWeek.isVacation = true;
+            vacationWeek.vacationId = vacation.id;
           }
         }
       });
       return vacationWeek;
+    },
+    openMonth(index) {
+      if (this.openedMonth === index) {
+        this.openedMonth = null;
+      } else {
+        this.openedMonth = index;
+      }
+    },
+    vacationRangeDateString(employeeId, vacationId) {
+      let range = '';
+      this.employees[employeeId - 1].vacations.forEach((vacation) => {
+        if (vacation.id === vacationId) {
+          range = `${new Date(vacation.startDate).getDate()}-${new Date(vacation.endDate).getDate()}`;
+        }
+      });
+      return range;
+    },
+    weekRangeDateString(weekOfYear) {
+      let dateFrom = new Date();
+      let dateTo = new Date('1970-01-01');
+      if (weekOfYear === 0) {
+        for (let day = 31; day > 25; day -= 1) {
+          if (this.weekByDate(`${this.currentYear - 1}-${12}-${day}`) === 52) {
+            const newDateFrom = new Date(`${this.currentYear - 1}-${12}-${day}`);
+            if (dateFrom > newDateFrom) {
+              dateFrom = newDateFrom;
+            }
+          }
+        }
+        for (let day = 1; day <= 8; day += 1) {
+          if (this.weekByDate(`${this.currentYear}-${1}-${day}`) === 52) {
+            const newDateTo = new Date(`${this.currentYear}-${1}-${day}`);
+            if (dateTo < newDateTo) {
+              dateTo = newDateTo;
+            }
+          }
+        }
+      } else {
+        for (let month = 0; month < 12; month += 1) {
+          for (let j = 1; j <= this.getLastDayOfMonth(this.currentYear, month); j += 1) {
+            if (this.weekByDate(`${this.currentYear}-${month + 1}-${j}`) === weekOfYear) {
+              const newDateFrom = new Date(`${this.currentYear}-${month + 1}-${j}`);
+              const newDateTo = new Date(`${this.currentYear}-${month + 1}-${j}`);
+              if (dateFrom > newDateFrom) {
+                dateFrom = newDateFrom;
+              }
+              if (dateTo < newDateTo) {
+                dateTo = newDateTo;
+              }
+            }
+          }
+        }
+      }
+      return `${this.formatDate(dateFrom)}.${this.formatMonth(dateFrom)}-${this.formatDate(dateTo)}.${this.formatMonth(dateTo)}`;
+    },
+    formatDate(date) {
+      return (`0${((date).getDate())}`).slice(-2);
+    },
+    formatMonth(month) {
+      return (`0${((month).getMonth()) + 1}`).slice(-2);
     },
   },
 };
@@ -144,9 +212,19 @@ td {
   padding: 0;
 }
 
-table {
-  // border: 1px solid black;
-  // cellspacing
+.month__name {
+  cursor: pointer;
+}
+
+.openedMonth {
+  width: 250px;
+}
+
+.openedWeek {
+  position: relative;
+  text-align: center;
+  border-left: 1px solid black;
+  border-right: 1px solid black;
 }
 
 .date {
@@ -154,18 +232,28 @@ table {
 }
 
 .weeks {
+  height: 100%;
   display: flex;
   justify-content: space-around;
-  // width: 100%;
-  // flex-direction: row;
 }
 
 .week {
-  height: 30px;
-  text-align: center;
+  height: 25px;
 }
 
 .week_vacation {
+  color: white;
   background: rgb(0, 166, 255);
+}
+
+.week__dates {
+  width: 100px;
+  position: absolute;
+  transform: rotate(-90deg);
+  transform-origin: left top 0;
+  left: 15px;
+  position: absolute;
+  bottom: -20px;
+  font-weight: 800;
 }
 </style>
